@@ -1,5 +1,5 @@
 # YZM304 Derin Ogrenme Proje Modulu I
-
+Seyit Kaan Güneş 23291060
 ## Introduction
 Bu repo, `YZM304_Proje_Odevi1_2526.pdf` icin tekrar uretilebilir bir ikili siniflandirma calismasi sunar. Veri kaynagi olarak `sklearn.datasets.load_breast_cancer` kullanilir. Calisma, laboratuvarda kurulan iki katmanli temel modelden baslayip veri on isleme, mimari iyilestirme, veri miktari etkisi, reglarizasyon ve farkli kutuphane tekrarlarini tek bir komutla ureten kanonik bir akis kurar.
 
