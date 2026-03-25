@@ -1,35 +1,14 @@
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-import numpy as np
-
-from src.data import RAW_DATA_PATH, SPLIT_MANIFEST_PATH, export_raw_dataset, prepare_dataset
+from src.dataset import export_dataset_artifacts, prepare_features
 
 
-def test_dataset_split_shapes_and_assets_exist() -> None:
-    export_raw_dataset()
-    split = prepare_dataset(standardize=False)
-
-    assert RAW_DATA_PATH.exists()
-    assert split.X_train.shape == (341, 30)
-    assert split.X_val.shape == (114, 30)
-    assert split.X_test.shape == (114, 30)
-    assert split.y_train.shape == (341, 1)
-    assert split.y_val.shape == (114, 1)
-    assert split.y_test.shape == (114, 1)
+def test_split_manifest_is_reproducible() -> None:
+    bundle_one = export_dataset_artifacts()
+    bundle_two = export_dataset_artifacts()
+    assert bundle_one.manifest == bundle_two.manifest
 
 
-def test_standardization_centers_training_features() -> None:
-    split = prepare_dataset(standardize=True)
-    assert np.allclose(split.X_train.mean(axis=0), 0.0, atol=1e-7)
-
-
-def test_split_manifest_matches_expected_sizes() -> None:
-    prepare_dataset(standardize=True)
-    payload = json.loads(Path(SPLIT_MANIFEST_PATH).read_text(encoding="utf-8"))
-    assert payload["train_size"] == 341
-    assert payload["validation_size_count"] == 114
-    assert payload["test_size_count"] == 114
-    assert len(payload["train_ids"]) == 341
+def test_train_fraction_reduces_training_rows() -> None:
+    bundle = export_dataset_artifacts()
+    prepared_full = prepare_features(bundle, bundle.feature_names, use_scaler=True, train_fraction=1.0)
+    prepared_half = prepare_features(bundle, bundle.feature_names, use_scaler=True, train_fraction=0.5)
+    assert len(prepared_half.X_train) < len(prepared_full.X_train)

@@ -1,1 +1,1 @@
-# Project package marker.
+"""YZM304 project package."""

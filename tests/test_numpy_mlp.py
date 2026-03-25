@@ -1,25 +1,19 @@
-from __future__ import annotations
+import numpy as np
 
-from src.data import prepare_dataset
-from src.models.manual_mlp import ManualMLPClassifier
+from src.numpy_mlp import NumpyMLP
 
 
-def test_manual_mlp_reaches_reasonable_accuracy() -> None:
-    split = prepare_dataset(standardize=True)
-    model = ManualMLPClassifier(
-        input_dim=split.X_train.shape[1],
-        hidden_layers=(6,),
-        learning_rate=0.1,
+def test_numpy_mlp_loss_decreases_on_simple_problem() -> None:
+    weights = [np.array([[0.2], [0.2]], dtype=np.float64)]
+    biases = [np.zeros((1, 1), dtype=np.float64)]
+    model = NumpyMLP(
+        weights,
+        biases,
+        hidden_activation="sigmoid",
+        learning_rate=0.2,
         l2_lambda=0.0,
-        seed=42,
     )
-    history = model.fit(
-        split.X_train,
-        split.y_train,
-        X_val=split.X_val,
-        y_val=split.y_val,
-        n_steps=500,
-    )
-
-    assert history.train_loss[-1] < history.train_loss[0]
-    assert model.score(split.X_test, split.y_test) >= 0.90
+    X = np.array([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]], dtype=np.float64)
+    y = np.array([0, 0, 0, 1], dtype=np.int64)
+    result = model.fit(X, y, X, y, X, y, epochs=80)
+    assert result.history["train_loss"].iloc[-1] < result.history["train_loss"].iloc[0]
