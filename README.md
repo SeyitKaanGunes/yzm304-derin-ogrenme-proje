@@ -1,110 +1,355 @@
-# YZM304 Derin Ogrenme Proje Modulu I
-Seyit Kaan Güneş 23291060
-## Introduction
-Bu repo, `YZM304_Proje_Odevi1_2526.pdf` icin tekrar uretilebilir bir ikili siniflandirma calismasi sunar. Veri kaynagi olarak `sklearn.datasets.load_breast_cancer` kullanilir. Calisma, laboratuvarda kurulan iki katmanli temel modelden baslayip veri on isleme, mimari iyilestirme, veri miktari etkisi, reglarizasyon ve farkli kutuphane tekrarlarini tek bir komutla ureten kanonik bir akis kurar.
+# Breast Cancer Binary Classification with Reproducible MLP Pipelines
 
-## Methods
-### Ortam
-- Python: `3.11`
-- Sanal ortam: `py -3.11 -m venv .venv`
-- Kurulum: `.\bootstrap.ps1`
-- Calistirma: `.\run_project.ps1` veya `.\.venv\Scripts\python.exe -m src.run_all`
-- Test: `.\.venv\Scripts\python.exe -m pytest`
+Bu proje, `YZM304_Proje_Odevi1_2526.pdf` kapsamında hazırlanmış, **tekrar üretilebilir** bir ikili sınıflandırma çalışmasıdır. Veri kaynağı olarak `sklearn.datasets.load_breast_cancer` kullanılmıştır. Çalışma; temel laboratuvar modelinden başlayarak veri ön işleme, mimari karşılaştırmaları, veri miktarının etkisi, regularization ve farklı backend tekrarlarını kapsayan uçtan uca bir deney akışı sunar.
 
-### Veri ve Bolme Stratejisi
-- Veri seti: `sklearn.datasets.load_breast_cancer`
-- Ornek sayisi: `569`
-- Ozellik sayisi: `30`
-- Siniflar: `malignant (0)`, `benign (1)`
-- Sinif dagilimi: `212 malignant (%37.3)`, `357 benign (%62.7)`
-- Train / validation / test bolmesi: `%60 / %20 / %20`
-- Gercek bolme sayilari: `341 train`, `114 validation`, `114 test`
-- Tum ayirmalar `seed=42` ile stratified olarak uretilir.
+---
 
-### Modeller ve Hiperparametreler
-- Kayip fonksiyonu: binary cross entropy
-- Optimizasyon: full-batch SGD
-- Karar esigi: `0.5`
-- Global tekrar uretilebilirlik tohumu: `42`
-- Agirlik baslatma semasi:
-  - Sigmoid gizli katmanlar ve cikis katmani icin `N(0, sqrt(2 / (fan_in + fan_out)))`
-  - ReLU gizli katmanlar icin `N(0, sqrt(2 / fan_in))`
-  - Tum bias degerleri `0`
-- Full-batch'in sayisal karsiligi:
-  - Tam train bolmesi icin `batch_size=341`
-  - `%75` train varyanti icin `batch_size=255`
-  - `%50` train varyanti icin `batch_size=170`
-  - Bu nedenle `1 epoch = 1 optimizer update` ve `n_steps = epochs`
-- Dengesiz sinif dagilimi nedeniyle model secimi: validation balanced accuracy azalan, `n_steps` artan, parametre sayisi artan, validation ROC-AUC azalan sira
-- NumPy deneyleri:
-  - `baseline_raw`: `30-8-1`, sigmoid, ham veri, `lr=0.08`, `epochs=1200`
-  - `baseline_scaled`: `30-8-1`, sigmoid, standardizasyon, `lr=0.08`, `epochs=1200`
-  - `wide_scaled`: `30-16-1`, sigmoid, standardizasyon, `lr=0.05`, `epochs=1400`
-  - `deep_scaled_no_l2`: `30-32-16-1`, relu, standardizasyon, `lr=0.01`, `epochs=1400`
-  - `deep_scaled_l2`: `30-32-16-1`, relu, standardizasyon, `lr=0.01`, `epochs=1400`, `L2=1e-3`
-  - `deep_scaled_l2_data50`: ayni derin model, train verisinin `%50`'si
-  - `deep_scaled_l2_data75`: ayni derin model, train verisinin `%75`'i
-  - `deep_scaled_l2_data100`: ayni derin model, train verisinin `%100`'u
-- Backend tekrarlar:
-  - NumPy referansi
-  - `scikit-learn MLPClassifier`
-  - PyTorch `nn.Module`
-- Backend bazli egitim ayrintilari:
-  - NumPy: deterministik full-batch SGD, `shuffle=False`, `momentum=0`, L2 ceza terimi loss icine eklenir
-  - sklearn: `solver='sgd'`, `batch_size=train_size`, `shuffle=False`, `momentum=0.0`, `nesterovs_momentum=False`, `max_iter=1`, `warm_start=True`, epoch dongusu `partial_fit`
-  - PyTorch: `torch.optim.SGD(lr=...)`, `momentum=0`, `weight_decay=L2`, `torch.manual_seed(42)`, `torch.use_deterministic_algorithms(True)`
-- Ortak sabitler:
-  - baslangic agirliklari `data/weights/*.npz`
-  - optimizer ailesi `SGD`
-  - split manifesti `data/splits/split_manifest.json`
+## Project Overview
 
-### Repo Yapisi
-- `src/`: veri hazirlama, NumPy MLP, sklearn adapter, PyTorch model ve raporlama kodlari
-- `data/`: ham veri disa aktarimi, split manifestleri ve baslangic agirliklari
-- `outputs/`: tum tablolar, confusion matrix'ler, egitim egrileri ve ozet raporlar
-- `tests/`: tekrar uretilebilirlik ve egitim dogrulama testleri
-- `Breast_Cancer_MLP_Project.ipynb`: pipeline ile uyumlu destekleyici notebook
+Bu repoda amaç, meme kanseri veri seti üzerinde çalışan çok katmanlı algılayıcı (MLP) modellerini sistematik biçimde incelemek ve tüm süreci **aynı ayarlar, aynı veri bölmeleri ve aynı başlangıç koşullarıyla** tekrar üretilebilir hale getirmektir.
+
+Çalışma şu sorulara odaklanır:
+
+- Ham veri ile standardize veri arasındaki fark ne kadar belirleyici?
+- Daha geniş ya da daha derin mimariler performansı nasıl etkiliyor?
+- L2 regularization gerçekten anlamlı bir katkı sağlıyor mu?
+- Eğitim verisi miktarı modelin genellemesini nasıl değiştiriyor?
+- Aynı deney NumPy, scikit-learn ve PyTorch üzerinde benzer sonuçlar veriyor mu?
+
+---
+
+## Environment Setup
+
+### Requirements
+
+- Python `3.11`
+
+### Virtual Environment
+
+```bash
+py -3.11 -m venv .venv
+```
+
+### Installation
+
+```bash
+.\bootstrap.ps1
+```
+
+### Run Full Pipeline
+
+```bash
+.\run_project.ps1
+```
+
+veya
+
+```bash
+.\.venv\Scripts\python.exe -m src.run_all
+```
+
+### Run Tests
+
+```bash
+.\.venv\Scripts\python.exe -m pytest
+```
+
+---
+
+## Dataset and Split Strategy
+
+Projede kullanılan veri seti:
+
+- **Dataset:** `sklearn.datasets.load_breast_cancer`
+- **Toplam örnek sayısı:** `569`
+- **Özellik sayısı:** `30`
+- **Sınıflar:** `malignant (0)`, `benign (1)`
+
+### Class Distribution
+
+- `212` malignant (`%37.3`)
+- `357` benign (`%62.7`)
+
+### Data Split
+
+Veri üç parçaya ayrılmıştır:
+
+- **Train:** `%60`
+- **Validation:** `%20`
+- **Test:** `%20`
+
+Gerçek örnek sayıları:
+
+- `341` train
+- `114` validation
+- `114` test
+
+Tüm ayrımlar:
+
+- `seed=42`
+- `stratified split`
+
+---
+
+## Training Design
+
+Tüm deneyler aynı temel eğitim mantığıyla yürütülmüştür:
+
+- **Loss function:** Binary Cross Entropy
+- **Optimizer:** Full-batch SGD
+- **Decision threshold:** `0.5`
+- **Global reproducibility seed:** `42`
+
+### Weight Initialization
+
+- Sigmoid katmanlar için: `N(0, sqrt(2 / (fan_in + fan_out)))`
+- ReLU gizli katmanlar için: `N(0, sqrt(2 / fan_in))`
+- Tüm bias değerleri: `0`
+
+### Full-Batch Equivalence
+
+Bu projede bir epoch, doğrudan bir optimizer update’e karşılık gelir.
+
+- Tam train split için `batch_size=341`
+- `%75` train varyantı için `batch_size=255`
+- `%50` train varyantı için `batch_size=170`
+
+Dolayısıyla:
+
+- `1 epoch = 1 update`
+- `n_steps = epochs`
+
+### Model Selection Rule
+
+Sınıf dağılımı dengesiz olduğu için model seçimi şu sıraya göre yapılmıştır:
+
+1. Validation balanced accuracy (azalan)
+2. `n_steps` (artan)
+3. Parametre sayısı (artan)
+4. Validation ROC-AUC (azalan)
+
+---
+
+## Experiments
+
+### NumPy Experiments
+
+Aşağıdaki deneyler NumPy tabanlı referans akış üzerinde çalıştırılmıştır:
+
+- **`baseline_raw`**
+  - Mimari: `30-8-1`
+  - Aktivasyon: `sigmoid`
+  - Veri: ham
+  - `lr=0.08`
+  - `epochs=1200`
+
+- **`baseline_scaled`**
+  - Mimari: `30-8-1`
+  - Aktivasyon: `sigmoid`
+  - Veri: standardize
+  - `lr=0.08`
+  - `epochs=1200`
+
+- **`wide_scaled`**
+  - Mimari: `30-16-1`
+  - Aktivasyon: `sigmoid`
+  - Veri: standardize
+  - `lr=0.05`
+  - `epochs=1400`
+
+- **`deep_scaled_no_l2`**
+  - Mimari: `30-32-16-1`
+  - Aktivasyon: `relu`
+  - Veri: standardize
+  - `lr=0.01`
+  - `epochs=1400`
+
+- **`deep_scaled_l2`**
+  - Mimari: `30-32-16-1`
+  - Aktivasyon: `relu`
+  - Veri: standardize
+  - `lr=0.01`
+  - `epochs=1400`
+  - `L2=1e-3`
+
+- **`deep_scaled_l2_data50`**
+  - Aynı derin model
+  - Train verisinin `%50`’si
+
+- **`deep_scaled_l2_data75`**
+  - Aynı derin model
+  - Train verisinin `%75`’i
+
+- **`deep_scaled_l2_data100`**
+  - Aynı derin model
+  - Train verisinin `%100`’ü
+
+---
+
+## Backend Reproductions
+
+Aynı deney akışı üç farklı backend üzerinde tekrar edilmiştir:
+
+- **NumPy** referans implementasyonu
+- **scikit-learn** `MLPClassifier`
+- **PyTorch** `nn.Module`
+
+### Backend-specific Notes
+
+#### NumPy
+
+- Deterministic full-batch SGD
+- `shuffle=False`
+- `momentum=0`
+- L2 ceza terimi doğrudan loss’a eklenir
+
+#### scikit-learn
+
+- `solver='sgd'`
+- `batch_size=train_size`
+- `shuffle=False`
+- `momentum=0.0`
+- `nesterovs_momentum=False`
+- `max_iter=1`
+- `warm_start=True`
+- Epoch döngüsü `partial_fit` ile ilerletilir
+
+#### PyTorch
+
+- `torch.optim.SGD(lr=...)`
+- `momentum=0`
+- `weight_decay=L2`
+- `torch.manual_seed(42)`
+- `torch.use_deterministic_algorithms(True)`
+
+### Shared Assets
+
+- Başlangıç ağırlıkları: `data/weights/*.npz`
+- Optimizer family: `SGD`
+- Split manifest: `data/splits/split_manifest.json`
+
+---
+
+## Repository Structure
+
+```text
+src/        -> veri hazırlama, NumPy MLP, sklearn adapter, PyTorch model ve raporlama kodları
+data/       -> ham veri çıktıları, split manifestleri ve başlangıç ağırlıkları
+outputs/    -> tablolar, confusion matrix’ler, eğitim eğrileri ve raporlar
+tests/      -> tekrar üretilebilirlik ve eğitim doğrulama testleri
+```
+
+Ek olarak:
+
+- `Breast_Cancer_MLP_Project.ipynb` dosyası, pipeline ile uyumlu bir destekleyici notebook olarak yer almaktadır.
+
+---
 
 ## Results
-Tum sonuc tablolari `outputs/tables/`, gorseller `outputs/figures/`, ozet raporlar `outputs/reports/` altinda uretilir. Bu calistirmada model secim tablosu `outputs/tables/model_selection.csv`, backend karsilastirmasi `outputs/tables/backend_comparison_metrics.csv`, secilen model raporu ise `outputs/reports/selected_model_report.md` olarak uretildi.
 
-### NumPy Deney Ozetleri
-| Deney | Val balanced acc | Val accuracy | Test accuracy | n_steps | Yorum |
-| --- | --- | --- | --- | --- | --- |
-| `baseline_raw` | `0.5000` | `0.6228` | `0.6316` | `1200` | Ham ozelliklerle belirgin underfitting goruldu. |
-| `baseline_scaled` | `0.9581` | `0.9649` | `0.9649` | `1200` | Standardizasyon tek basina ciddi iyilestirme sagladi. |
-| `wide_scaled` | `0.9651` | `0.9737` | `0.9737` | `1400` | En iyi balanced accuracy grubunda ve ayni adim sayisinda en dusuk parametreli model. |
-| `deep_scaled_no_l2` | `0.9581` | `0.9649` | `0.9561` | `1400` | Derin mimari testte genis modele gore geride kaldi. |
-| `deep_scaled_l2` | `0.9581` | `0.9649` | `0.9561` | `1400` | L2, accuracy'i degistirmedi fakat agirlik normunu hafif dusurdu. |
-| `deep_scaled_l2_data50` | `0.9651` | `0.9737` | `0.9649` | `1400` | Balanced accuracy'de secilen modelle esit, fakat daha fazla parametre kullaniyor. |
-| `deep_scaled_l2_data75` | `0.9651` | `0.9737` | `0.9474` | `1400` | Balanced accuracy'de esit, testte daha zayif genelledi. |
-| `deep_scaled_l2_data100` | `0.9581` | `0.9649` | `0.9561` | `1400` | Derin modelin tam veri surumu. |
+Üretilen tüm sonuçlar şu klasörlerde toplanır:
 
-### Secilen Model
-- Secilen model: `wide_scaled`
-- Mimari: `30-16-1`
-- Hidden activation: `sigmoid`
-- Preprocessing: `StandardScaler`
-- Validation balanced accuracy: `0.9651`
-- Validation accuracy: `0.9737`
-- Test accuracy: `0.9737`
-- Test F1: `0.9790`
-- Test ROC-AUC: `0.9954`
+- **Tables:** `outputs/tables/`
+- **Figures:** `outputs/figures/`
+- **Reports:** `outputs/reports/`
 
-Sinif dagilimi dengeli olmadigi icin secim kurali validation balanced accuracy > dusuk `n_steps` > dusuk parametre sayisi > validation ROC-AUC olarak uygulandi. `wide_scaled`, `deep_scaled_l2_data50` ve `deep_scaled_l2_data75` validation balanced accuracy tarafinda esitlenmesine ragmen ayni adim sayisinda daha az parametre kullandigi icin secildi.
+Önemli çıktı dosyaları:
 
-### Backend Karsilastirmasi
-| Mimari | NumPy test acc | sklearn test acc | PyTorch test acc | NumPy test balanced acc |
-| --- | --- | --- | --- | --- |
+- `outputs/tables/model_selection.csv`
+- `outputs/tables/backend_comparison_metrics.csv`
+- `outputs/reports/selected_model_report.md`
+
+---
+
+## NumPy Experiment Summary
+
+| Experiment | Val Balanced Acc | Val Accuracy | Test Accuracy | n_steps | Comment |
+|---|---:|---:|---:|---:|---|
+| `baseline_raw` | `0.5000` | `0.6228` | `0.6316` | `1200` | Ham özelliklerle belirgin underfitting gözlendi. |
+| `baseline_scaled` | `0.9581` | `0.9649` | `0.9649` | `1200` | Standardization tek başına ciddi iyileştirme sağladı. |
+| `wide_scaled` | `0.9651` | `0.9737` | `0.9737` | `1400` | En iyi balanced accuracy grubunda ve aynı adım sayısında daha düşük parametreli. |
+| `deep_scaled_no_l2` | `0.9581` | `0.9649` | `0.9561` | `1400` | Daha derin yapı testte geniş modele göre geride kaldı. |
+| `deep_scaled_l2` | `0.9581` | `0.9649` | `0.9561` | `1400` | L2, accuracy’yi değiştirmedi ancak ağırlık normunu azalttı. |
+| `deep_scaled_l2_data50` | `0.9651` | `0.9737` | `0.9649` | `1400` | Balanced accuracy’de seçilen modelle eşit fakat daha fazla parametre içeriyor. |
+| `deep_scaled_l2_data75` | `0.9651` | `0.9737` | `0.9474` | `1400` | Validation’da güçlü ama testte daha zayıf genelleme. |
+| `deep_scaled_l2_data100` | `0.9581` | `0.9649` | `0.9561` | `1400` | Derin modelin tam veri sürümü. |
+
+---
+
+## Selected Model
+
+Bu çalışmada seçilen model:
+
+- **Model:** `wide_scaled`
+- **Architecture:** `30-16-1`
+- **Hidden activation:** `sigmoid`
+- **Preprocessing:** `StandardScaler`
+
+### Final Metrics
+
+- **Validation balanced accuracy:** `0.9651`
+- **Validation accuracy:** `0.9737`
+- **Test accuracy:** `0.9737`
+- **Test F1:** `0.9790`
+- **Test ROC-AUC:** `0.9954`
+
+### Why This Model?
+
+`wide_scaled`, validation balanced accuracy açısından en iyi grup içinde yer almıştır. Aynı başarıyı gösteren daha derin alternatifler bulunmasına rağmen, daha az parametre kullanması nedeniyle seçim kriterlerine göre en uygun model olarak belirlenmiştir.
+
+---
+
+## Backend Comparison
+
+| Architecture | NumPy Test Acc | sklearn Test Acc | PyTorch Test Acc | NumPy Test Balanced Acc |
+|---|---:|---:|---:|---:|
 | `30-8-1` | `0.9649` | `0.9649` | `0.9649` | `0.9673` |
 | `30-16-1` | `0.9737` | `0.9737` | `0.9737` | `0.9742` |
 | `30-32-16-1` | `0.9561` | `0.9561` | `0.9561` | `0.9554` |
 
-Bu tablo, ayni split, ayni baslangic agirliklari ve ayni SGD ayarlari ile backend tekrarlarinin esdeger sonuc verdigini gosterir. Confusion matrix gorselleri `outputs/figures/confusion_matrix_*` dosyalari olarak kaydedildi.
+Bu tablo, aynı splitler, aynı başlangıç ağırlıkları ve aynı SGD ayarları altında NumPy, scikit-learn ve PyTorch backend’lerinin eşdeğer çıktılar üretebildiğini göstermektedir.
+
+Confusion matrix görselleri:
+
+- `outputs/figures/confusion_matrix_*`
+
+---
 
 ## Discussion
-Calisma iki temel sonucu ortaya koydu. Birincisi, laboratuvar modeli icin en kritik iyilestirme veri on islemedir; ham veriyle kurulan `baseline_raw` modeli `0.62` validation accuracy etrafinda kalirken standardizasyon sonrasi ayni mimari `0.96+` duzeyine cikti. Ikincisi, daha derin mimari her zaman daha iyi model vermedi; bu veri setinde genis ama tek gizli katmanli `30-16-1` modeli, daha derin `30-32-16-1` mimarisinden daha dengeli genelleme sagladi.
 
-L2 reglarizasyon bu kurulumda accuracy tarafinda belirgin bir artis getirmedi, ancak agirlik normunu `10.1610` seviyesinden `10.1606` seviyesine indirerek parametre buyuklugunu kontrol etti. Veri miktari deneyleri, `%50` ve `%75` train alti-kumelerinin validation tarafinda rekabetci kalabildigini; fakat test genellemesinde tam veriyle secilen genis modelin daha istikrarli oldugunu gosterdi.
+Bu çalışma iki temel sonucu açık biçimde ortaya koymaktadır:
 
-Repo tek kanonik akisi korur; eski durumlarla uyumluluk katmani eklemez. Temiz checkout sonrasinda `.venv` kurulumu, testlerin calistirilmasi ve `python -m src.run_all` komutuyla tum ciktilar yeniden uretilebilir.
+### 1) Veri ön işleme kritik önemdedir
+
+Ham veri ile eğitilen `baseline_raw` modeli, düşük doğruluk seviyelerinde kalmıştır. Aynı mimarinin yalnızca standardization uygulanmış sürümü ise ciddi bir performans sıçraması göstermiştir. Bu da, bu veri seti için en belirleyici iyileştirmelerden birinin veri ön işleme olduğunu göstermektedir.
+
+### 2) Daha derin model her zaman daha iyi değildir
+
+Daha karmaşık olan `30-32-16-1` mimarisi, bu problemde daha geniş fakat daha sade olan `30-16-1` modelini geçememiştir. Sonuç olarak, tek gizli katmanlı ama daha geniş yapı daha dengeli bir genelleme sunmuştur.
+
+### 3) L2 regularization sınırlı ama anlamlı bir etki göstermiştir
+
+L2 regularization bu deney düzeninde accuracy üzerinde belirgin bir artış oluşturmamıştır. Ancak ağırlık normunda küçük bir azalma sağlayarak parametre büyüklüğünü kontrol altında tutmuştur.
+
+### 4) Veri miktarı tek başına her şeyi çözmemektedir
+
+`%50` ve `%75` train alt kümeleri validation tarafında rekabetçi sonuçlar verebilmiştir. Buna rağmen test tarafında daha istikrarlı genelleme yine seçilen geniş modelde görülmüştür.
+
+---
+
+## Reproducibility
+
+Bu repo tek ve kanonik bir deney akışı sunar. Eski sürümlerle geriye dönük uyumluluk katmanları eklenmemiştir. Temiz bir kurulumdan sonra aşağıdaki adımlar izlenerek tüm çıktıların yeniden üretilmesi mümkündür:
+
+```bash
+py -3.11 -m venv .venv
+.\bootstrap.ps1
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m src.run_all
+```
+
+---
+
+## Conclusion
+
+Bu proje, meme kanseri veri seti üzerinde çalışan MLP tabanlı sınıflandırma deneylerini yalnızca performans odaklı değil, aynı zamanda **karşılaştırılabilir**, **yorumlanabilir** ve **tekrar üretilebilir** bir yapıda sunmaktadır. Elde edilen sonuçlar, özellikle veri ön işleme ve mimari sadeliğin bu görevde büyük önem taşıdığını göstermektedir.
